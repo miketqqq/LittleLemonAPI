@@ -46,19 +46,38 @@ class CartSerializer(serializers.ModelSerializer):
 
 class OrderSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(default=serializers.CurrentUserDefault(), read_only=True)
-    delivery_crew = serializers.PrimaryKeyRelatedField(default=serializers.CurrentUserDefault(),
-                                                       queryset=User.objects.filter(groups__name='delivery_crew'))
-
+    orderitem = serializers.StringRelatedField(many=True, read_only=True)
+    delivery_crew = serializers.PrimaryKeyRelatedField(
+        default=serializers.CurrentUserDefault(),
+        read_only=True
+    )
     class Meta:
         model = Order
         fields = '__all__'
-        read_only_fields = ['delivery_crew', 'status', 'total', 'date']
+        read_only_fields = ['orderitem', 'status', 'total', 'date']
+        
 
+class ManagerOrderSerializer(OrderSerializer):
+    delivery_crew = serializers.PrimaryKeyRelatedField(
+        default=serializers.CurrentUserDefault(),
+        queryset=User.objects.filter(groups__name='Delivery_crew'),
+    )
+    class Meta:
+        model = Order
+        fields = '__all__'
+        read_only_fields = ['total', 'date']
+
+class CrewOrderSerializer(OrderSerializer):
+    class Meta:
+        model = Order
+        fields = '__all__'
+        read_only_fields = ['total', 'date']
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    menuitem = MenuItemSerializer()
+    menuitem = serializers.StringRelatedField(read_only=True)
+    status = serializers.BooleanField(source='order.status')
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'menuitem', 'quantity', 'unit_price', 'price']
+        fields = ['id', 'status', 'menuitem', 'quantity', 'unit_price', 'price']

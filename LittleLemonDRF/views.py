@@ -1,13 +1,12 @@
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 
 # Create your views here.
 from .models import Category, MenuItem, Cart, Order, OrderItem
 from LittleLemonDRF.serializers import *
 #from LittleLemonDRF.serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer, OrderItemSerializer
-from .utils import CustomPagination
+from .utils import CustomPagination, IsDeliveryCrew
 from datetime import date
 
 
@@ -32,7 +31,6 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     """
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemSerializer
-    permission_classes = [permissions.IsAuthenticated] #only manager can write
 
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering_fields = ['price']
@@ -59,10 +57,10 @@ class CartViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         #get user's cart
         user = self.request.user
-        #if user.group == admin: 
-        #return Cart.objects.all()
-        #else:
-        return Cart.objects.filter(user=user).select_related('menuitem')
+        if user.is_staff: 
+            return Cart.objects.all()           
+        else:
+            return Cart.objects.filter(user=user).select_related('menuitem')
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -71,46 +69,95 @@ class OrderViewSet(viewsets.ModelViewSet):
     """
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    ordering_fields = ['user']
+    filterset_fields = ['user', 'status', 'delivery_crew',]
+
+    pagination_class = CustomPagination
 
     def get_queryset(self):
         #get user's order
         user = self.request.user
+
+        #admin can get all orders
         if user.is_staff:
-            return Order.objects.all()
+            return Order.objects.all().prefetch_related('orderitem')
+        
+        #Delivery_crew can only get assigned orders
+        elif user.groups.filter(name='Delivery_crew').exists():
+            return Order.objects.filter(delivery_crew=user).prefetch_related('orderitem')
+        
+        #user returns its own orders
         else:
-            return Order.objects.filter(user=user)
+            return Order.objects.filter(user=user).prefetch_related('orderitem')
+
+    def get_permissions(self):
+        if self.action == 'destroy':
+            permission_classes = [permissions.IsAdminUser]
+        elif self.action == 'update':
+            permission_classes = [permissions.IsAdminUser | IsDeliveryCrew]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve' or self.action == 'update':
+            user = self.request.user
+            if user.is_staff: 
+                self.serializer_class = ManagerOrderSerializer
+            elif user.groups.filter(name='Delivery_crew').exists():
+                self.serializer_class = CrewOrderSerializer
+
+        return super().get_serializer_class()
 
     def create(self, request):
         user = request.user
-        carts = Cart.objects.filter(user=user)
-        order = Order.objects.create(
-            user=user,
-            date=date.today()
-        )
-        order_total = 0
-        for cart_item in carts:
-            orderitem = OrderItem.objects.create(
-                order=order,
-                menuitem=cart_item.menuitem,
-                quantity=cart_item.quantity,
-                unit_price=cart_item.unit_price,
-                price=cart_item.price,
+
+        #get all items from cart
+        cart = Cart.objects.filter(user=user)
+        if not cart:
+            content = {'message': "no item in cart"}
+            return Response(content, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            #create an order instance for orderitem to reference
+            order = Order.objects.create(
+                user=user,
+                date=date.today()
             )
-            orderitem.save()
-            order_total += cart_item.price
-        order.total = order_total
-        order.save()
-        Cart.objects.all().delete()
+            order_total = 0
+
+            #transform all cart items to order items
+            for cart_item in cart:
+                orderitem = OrderItem.objects.create(
+                    order=order,
+                    menuitem=cart_item.menuitem,
+                    quantity=cart_item.quantity,
+                    unit_price=cart_item.unit_price,
+                    price=cart_item.price,
+                )
+                orderitem.save()
+                order_total += cart_item.price
+            order.total = order_total
+            order.save()
+        except Exception:
+            raise Exception
+        else:
+            #clear all cart items only if no error in creating an order
+            Cart.objects.all().delete()
+
         return Response(self.serializer_class(order).data, status=status.HTTP_201_CREATED)
     
     def retrieve(self, request, pk=None):
         instance = self.get_object()
-        order_items = instance.orderitem_set.all()
+        order_items = instance.orderitem.all()
+
+        #return order items instead of order
         serializer = OrderItemSerializer(order_items, many=True)
         return Response(serializer.data,
                         status=status.HTTP_200_OK)
     
-    
+
 
     

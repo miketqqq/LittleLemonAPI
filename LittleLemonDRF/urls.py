@@ -12,4 +12,6 @@ router.register(r'order', views.OrderViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('', include('djoser.urls')), #users/, Creates a new user with name, email and password
+    path('', include('djoser.urls.authtoken')), # for token authentication, work tgt with rest_framework.authtoken
 ]
