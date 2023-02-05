@@ -22,5 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('token/login/', obtain_auth_token),
-    path('', include('LittleLemonDRF.urls')),
+    path('api/', include('LittleLemonDRF.urls')),
 ]

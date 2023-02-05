@@ -1,11 +1,13 @@
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.contrib.auth.models import User, Group
+from django.shortcuts import get_object_or_404
+
 
 # Create your views here.
 from .models import Category, MenuItem, Cart, Order, OrderItem
-from LittleLemonDRF.serializers import *
-#from LittleLemonDRF.serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer, OrderItemSerializer
+from LittleLemonDRF.serializers import UserSerializer, CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer, OrderItemSerializer, ManagerOrderSerializer, CrewOrderSerializer
 from .utils import CustomPagination, IsDeliveryCrew
 from datetime import date
 
@@ -18,7 +20,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
 
     def get_permissions(self):
-        if self.action == 'list':
+        if self.action == 'list' or self.action == 'retrieve':
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [permissions.IsAdminUser]
@@ -39,7 +41,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
     pagination_class = CustomPagination
 
     def get_permissions(self):
-        if self.action == 'list':
+        if self.action == 'list' or self.action == 'retrieve':
             permission_classes = [permissions.IsAuthenticated]
         else:
             permission_classes = [permissions.IsAdminUser]
@@ -159,5 +161,60 @@ class OrderViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_200_OK)
     
 
+class ManagerViewSet(viewsets.ModelViewSet):
 
+    queryset = User.objects.filter(groups__name='Manager')
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = UserSerializer
+
+    def create(self, request, pk=None):
+        username = request.data.get('username')
+        if not username:
+            return Response({'message':'error'}, status=status.HTTP_404_NOT_FOUND)
+        
+        user = get_object_or_404(User, username=username)
+        manager = Group.objects.get(name='Manager')
+        manager.user_set.add(user)
+        return Response({'message':'added a user to manager group'}, status=status.HTTP_201_CREATED)
+    
+    def destroy(self, request, pk=None):
+        user = self.get_object()
+        if not user:
+            return Response({'message':'error'}, status=status.HTTP_404_NOT_FOUND)
+        
+        manager = Group.objects.get(name='Manager')
+        manager.user_set.remove(user)
+        return Response({'message':'removed a user from manager group'}, status=status.HTTP_200_OK)
+    
+    def update(self, request, pk=None):
+        return Response({'message':'no such action'}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+class CrewViewSet(viewsets.ModelViewSet):
+
+    queryset = User.objects.filter(groups__name='Delivery_crew')
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = UserSerializer
+
+    def create(self, request, pk=None):
+        username = request.data.get('username')
+        if not username:
+            return Response({'message':'error'}, status=status.HTTP_404_NOT_FOUND)
+        
+        user = get_object_or_404(User, username=username)
+        crew = Group.objects.get(name='Delivery_crew')
+        crew.user_set.add(user)
+        return Response({'message':'added a user to crew group'}, status=status.HTTP_201_CREATED)
+    
+    def destroy(self, request, pk=None):
+        user = self.get_object()
+        if not user:
+            return Response({'message':'error'}, status=status.HTTP_404_NOT_FOUND)
+        
+        crew = Group.objects.get(name='Delivery_crew')
+        crew.user_set.remove(user)
+        return Response({'message':'removed a user from crew group'}, status=status.HTTP_200_OK)
+    
+    def update(self, request, pk=None):
+        return Response({'message':'no such action'}, status=status.HTTP_400_BAD_REQUEST)
     
