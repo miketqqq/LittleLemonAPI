@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 #for pagination
 class CustomPagination(PageNumberPagination):
-    page_size = 10 # default page size
+    page_size = 2 # default page size
     max_page_size = 1000 # default max page size
     page_size_query_param = 'PAGE_SIZE' 
       
@@ -24,6 +24,18 @@ class IsDeliveryCrew(permissions.BasePermission):
     """
     Custom permission for delivery crew.
     """
-    def has_object_permission(self, request, view, obj):
-        # Write permissions are only allowed to the owner of the snippet.
+    def has_permission(self, request, view):
         return request.user.groups.filter(name='Delivery_crew').exists()
+    
+    def has_object_permission(self, request, view, obj):
+        return request.user.groups.filter(name='Delivery_crew').exists()
+    
+class IsManager(permissions.BasePermission):
+    """
+    Custom permission for manager.
+    """
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name='Manager').exists()
+    
+    def has_object_permission(self, request, view, obj):
+        return request.user.groups.filter(name='Manager').exists()

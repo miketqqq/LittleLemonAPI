@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404
 # Create your views here.
 from .models import Category, MenuItem, Cart, Order, OrderItem
 from LittleLemonDRF.serializers import UserSerializer, CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer, OrderItemSerializer, ManagerOrderSerializer, CrewOrderSerializer
-from .utils import CustomPagination, IsDeliveryCrew
+from .utils import CustomPagination, IsDeliveryCrew, IsManager
 from datetime import date
 
 
@@ -21,10 +21,10 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == 'list' or self.action == 'retrieve':
-            permission_classes = [permissions.IsAuthenticated]
+            self.permission_classes = [permissions.IsAuthenticated]
         else:
-            permission_classes = [permissions.IsAdminUser]
-        return [permission() for permission in permission_classes]
+            self.permission_classes = [permissions.IsAdminUser|IsManager]
+        return super(self.__class__, self).get_permissions()
 
 
 class MenuItemViewSet(viewsets.ModelViewSet):
@@ -42,10 +42,10 @@ class MenuItemViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == 'list' or self.action == 'retrieve':
-            permission_classes = [permissions.IsAuthenticated]
+            self.permission_classes = [permissions.IsAuthenticated]
         else:
-            permission_classes = [permissions.IsAdminUser]
-        return [permission() for permission in permission_classes]
+            self.permission_classes = [permissions.IsAdminUser| IsManager]
+        return super(self.__class__, self).get_permissions()
 
 
 class CartViewSet(viewsets.ModelViewSet):
@@ -59,7 +59,7 @@ class CartViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         #get user's cart
         user = self.request.user
-        if user.is_staff: 
+        if user.groups.filter(name='Manager').exists(): 
             return Cart.objects.all()           
         else:
             return Cart.objects.filter(user=user).select_related('menuitem')
@@ -83,7 +83,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         #admin can get all orders
-        if user.is_staff:
+        if user.groups.filter(name='Manager').exists():
             return Order.objects.all().prefetch_related('orderitem')
         
         #Delivery_crew can only get assigned orders
@@ -96,17 +96,18 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == 'destroy':
-            permission_classes = [permissions.IsAdminUser]
-        elif self.action == 'update':
-            permission_classes = [permissions.IsAdminUser | IsDeliveryCrew]
+            self.permission_classes = [permissions.IsAdminUser| IsManager]
+        elif self.action == 'update' or self.action == 'partial_update':
+            self.permission_classes = [permissions.IsAdminUser| IsManager| IsDeliveryCrew]
         else:
-            permission_classes = [permissions.IsAuthenticated]
-        return [permission() for permission in permission_classes]
+            self.permission_classes = [permissions.IsAuthenticated]
+        return super(self.__class__, self).get_permissions()
+
 
     def get_serializer_class(self):
         if self.action == 'retrieve' or self.action == 'update':
             user = self.request.user
-            if user.is_staff: 
+            if user.groups.filter(name='Manager').exists(): 
                 self.serializer_class = ManagerOrderSerializer
             elif user.groups.filter(name='Delivery_crew').exists():
                 self.serializer_class = CrewOrderSerializer
@@ -157,14 +158,12 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         #return order items instead of order
         serializer = OrderItemSerializer(order_items, many=True)
-        return Response(serializer.data,
-                        status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
 
 class ManagerViewSet(viewsets.ModelViewSet):
-
     queryset = User.objects.filter(groups__name='Manager')
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAdminUser| IsManager]
     serializer_class = UserSerializer
 
     def create(self, request, pk=None):
@@ -191,9 +190,8 @@ class ManagerViewSet(viewsets.ModelViewSet):
     
 
 class CrewViewSet(viewsets.ModelViewSet):
-
     queryset = User.objects.filter(groups__name='Delivery_crew')
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAdminUser| IsManager]
     serializer_class = UserSerializer
 
     def create(self, request, pk=None):
