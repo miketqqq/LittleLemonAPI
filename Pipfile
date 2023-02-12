@@ -10,6 +10,8 @@ djangorestframework-xml = "*"
 djoser = "*"
 python-dotenv = "*"
 django-filter = "*"
+mysql-connector-python = "*"
+mysqlclient = "*"
 
 [dev-packages]
 

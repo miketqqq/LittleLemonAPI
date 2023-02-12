@@ -22,5 +22,11 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('token/login/', obtain_auth_token),
+
+    path('auth/', include('djoser.urls')), #users/, Creates a new user with name, email and password
+    path('auth/', include('djoser.urls.authtoken')), # for token authentication, work tgt with rest_framework.authtoken
+
     path('api/', include('LittleLemonDRF.urls')),
+    
+    path('restaurant/', include('restaurant.urls')),
 ]
